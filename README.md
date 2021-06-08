@@ -13,10 +13,18 @@ With twitter
 
 ## Methodology 
 
-- Use NLTK 
+- Using Python NLTK package to tokenize, lemmatize and then vectorize the words using Bag-of-words model 
+- Determine best classifier for use case.
+- Optimize hyperparamters using RandomSearch cross validation.
+
 ## Data sources
-- [Kaggle (NLP getting started)](https://www.kaggle.com/c/nlp-getting-started/overview) 
-- [Kaggle (Disaster image dataset)](https://www.kaggle.com/mikolajbabula/disaster-images-dataset-cnn-model)
+
+- [Kaggle (NLP getting started)](https://www.kaggle.com/c/nlp-getting-started/overview) : For hand labeled tweets. 
+- [Kaggle (Disaster image dataset)](https://www.kaggle.com/mikolajbabula/disaster-images-dataset-cnn-model): For images of natural disasters that were divided into disaster specific folders.
+
+## Pre-processing 
+
+Text corpus was preprocessed to remove any english stop words, punctuations, hyperlinks and symbols. In addition, any words that did not constitute as natural disaster were also muted that would have potentially skewed our classifier.
 
 ## Visualization 
 
@@ -25,6 +33,9 @@ Below is a word cloud image that shows frequency of words that are classified as
 
 ## Modeling and evaluation 
 
-## Limitations 
+Bag-of-words and TF-IDF model was used to generate ngram vectors from the corpus and then used linear regression as well as ensemble classifiers such as RandomForest and GradientBoost to classify the tweets.  
+The best results were from our uni-bigram Bag-of-Words model with RandomForest classifier had an accuracy of ~78\%. It had the lowest false positive rate and better performance in detecting true positives. 
+
+## Limitations and Future directions
 
 - Class imbalance 
