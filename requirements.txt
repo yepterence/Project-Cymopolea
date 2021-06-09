@@ -1,0 +1,11 @@
+numpy
+pandas
+re
+matplotlib
+sklearn
+contractions
+seaborn
+wordcloud
+string
+jupyterlab
+notebook
