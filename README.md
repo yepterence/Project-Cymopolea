@@ -1,4 +1,6 @@
 # Project-Cymopolea
+
+![disaster-wordcloud](images/Natural-Disaster.jpg?raw=true "Disaster Tweet wordcloud")
 Natural disasters are major adverse events resulting from natural processes of the Earth and have plagued us for centuries. Fortunately, we've gotten better in mitigating and created tools that allow us to detect these events in advance which has aided us in taking proactive measures to prepare for the event.  
 The project name was inspired from the greek goddess of violent storm waves, Cymopolea (kee-mo-po-laya) ([source](https://greekmythology.wikia.org/wiki/Kymopoleia)) 
 
