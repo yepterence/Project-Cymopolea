@@ -1,9 +1,9 @@
-import json 
+import json
 from kafka3 import KafkaClient, KafkaProducer
 import logging
-import time 
+import time
 import os
-import tweepy 
+import tweepy
 from dotenv import load_dotenv
 from tweepy import Client, StreamingClient
 
@@ -26,57 +26,96 @@ ACCESS_SECRET = os.environ.get('ACCESS_SECRET')
 # TO-DO: Calculate no of tweets and the %age change in price 
 # Scrape and dump data to S3
 
-client = Client(bearer_token=BEARER_TOKEN, wait_on_rate_limit=True)
-auth = tweepy.OAuth1UserHandler(ACCESS_SECRET, ACCESS_TOKEN, CONSUMER_KEY, CONSUMER_SECRET)
-api = tweepy.API(auth)
+# authentication
+# auth = tweepy.OAuth1UserHandler(consumer_key=CONSUMER_KEY,
+#                                 consumer_secret=CONSUMER_SECRET,
+#                                 access_token=ACCESS_TOKEN,
+#                                 access_token_secret=ACCESS_SECRET
+#                                 )
+# api = tweepy.API(auth)
 
 # Instantiate kafka client
 kafka_client = KafkaClient(bootstrap_servers=["localhost:9092"])
-producer = KafkaProducer(bootstrap_servers=["localhost:9092"], max_poll_records=1500)
+producer = KafkaProducer(bootstrap_servers=["localhost:9092"])
+
+
+def rule_generator(screen_names, search_terms, english=True, no_rt=False):
+    """Generate rules for input search terms with option to filter for english only and non-retweets"""
+    if len(search_terms) == 1:
+        rule = search_terms[0]
+    else:
+        rule = " ".join([str(item) for item in search_terms])
+    if screen_names:
+        if len(screen_names) == 1:
+            rule += f"(from {screen_names[0]})"
+        elif len(screen_names) > 1:
+            rule += " (from "
+            for name in screen_names:
+                if screen_names.index(name) != len(screen_names)-1:
+                    rule += name + " OR "
+                else:
+                    rule += f"{name} )"
+        else:
+            pass
+    if english:
+        rule += " lang:en"
+    if no_rt:
+        rule += " -is:retweet"
+
+    return rule
 
 
 class TweetStreamer(StreamingClient):
 
-    def on_connect(self):
-        logger.info("Connection established")
-        return True
-
     def on_tweet(self, tweet):
-        if tweet.referenced_tweets == None:
-            print(tweet.text)
-            time.sleep(2)
-         
-    def on_status(self, data):
-        logger.info(data)
-        producer.send(TOPIC_NAME, json.dumps())
-        return True
-    
-    def on_limit(self,status_code):
-        logger.warn("Twitter API Rate limit reached, pausing stream for 15 minutes. %s", status_code)
-        time.sleep(15 * 60) # 15 minute cooloff 
-        logger.info("Resuming stream..")
-        return True
+        print(f"Full tweet: {tweet}")
+        print(f"Tweet ID: {tweet.id}, Tweet: {tweet.text}")
 
-    def on_connection_error(self, status_code):
-        logger.error("Stream has been disconnected due to %s", status_code)
-        if status_code == 420:
-            
-            return False
+        logger.info("Incoming data: %s", tweet['data'])
+        try:
+            producer.send(TOPIC_NAME, json.dumps(tweet['data']))
+            producer.flush()
+            time.sleep(0.5)
+        except Exception as e:
+            print(e)
+
+    # def on_errors(self, status_code):
+    #     logger.error("Stream has been disconnected due to %s", status_code)
+    #     if status_code == 420:
+    #         return False
+    #
+    # def on_exception(self, exception):
+    #     print("An error has occurred while trying retrieve tweets: {}".format(exception))
 
 
 def main():
-    # Search keywords 
-    search_terms = ["market", "market_news"]
-    stream = TweetStreamer(bearer_token=BEARER_TOKEN)
-    for term in search_terms:
-        stream.add_rules(tweepy.StreamRule(term))
-    stream.filter(tweet_fields = ["referenced_tweets"])
+    # Search keywords
+    screen_names = ["Benzinga", "CNBC Now", "Stocktwits", "WSJ Markets"]
+    hashtags = ["#earthquake", "#storm", "#tsunami", "#flooding"]
+    search_terms = ["market narrative"]
+    # rules = rule_generator(screen_names=screen_names, search_terms=search_terms, english=True, no_rt=True)
+    rules = "from (@stlouisfed OR @business OR @MarketWatch) lang:en -is:retweet"
+    print(rules)
+    rule_ids = []
+    # existing_rules = TweetStreamer.get_rules()
+    # logger.info("Existing rules: %s", existing_rules)
+    # initialize client
+    streaming_client = TweetStreamer(bearer_token=BEARER_TOKEN, wait_on_rate_limit=True)
+    result = streaming_client.get_rules()
+    print(result)
+    if result.data:
+        for rule in result.data:
+            print(f"rule marked for deletion: {rule.id} - {rule.value}")
+            rule_ids.append(rule.id)
+        if len(rule_ids) > 0:
+            streaming_client.delete_rules(rule_ids)
+        else:
+            print("No rules to delete.")
+    streaming_client = TweetStreamer(bearer_token=BEARER_TOKEN)
+    streaming_client.add_rules(add=tweepy.StreamRule(value=rules))
+    streaming_client.filter()
+
 
 if __name__ == '__main__':
     # insert twitter stream code
     main()
-    
-    # Get producer performance metrics
-    producer_metrics = producer.metrics()
-
-
