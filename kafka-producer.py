@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import json
 from kafka3 import KafkaClient, KafkaProducer
 import logging
@@ -23,22 +25,15 @@ BEARER_TOKEN = os.environ.get('API_BEARER_TOKEN')
 ACCESS_TOKEN = os.environ.get('ACCESS_TOKEN')
 ACCESS_SECRET = os.environ.get('ACCESS_SECRET')
 
-# TO-DO: Calculate no of tweets and the %age change in price 
-# Scrape and dump data to S3
-
-# authentication
-# auth = tweepy.OAuth1UserHandler(consumer_key=CONSUMER_KEY,
-#                                 consumer_secret=CONSUMER_SECRET,
-#                                 access_token=ACCESS_TOKEN,
-#                                 access_token_secret=ACCESS_SECRET
-#                                 )
-# api = tweepy.API(auth)
+# TO-DO: Classify tweets into natural disaster vs non-disaster using old model.
+# And push data into another partition.
 
 # Instantiate kafka client
 kafka_client = KafkaClient(bootstrap_servers=["localhost:9092"])
-producer = KafkaProducer(bootstrap_servers=["localhost:9092"])
+producer = KafkaProducer(bootstrap_servers=["localhost:9092"], retries=3)
 
 
+# Need to create utils module for these.
 def rule_generator(screen_names, search_terms, english=True, no_rt=False):
     """Generate rules for input search terms with option to filter for english only and non-retweets"""
     if len(search_terms) == 1:
@@ -51,7 +46,7 @@ def rule_generator(screen_names, search_terms, english=True, no_rt=False):
         elif len(screen_names) > 1:
             rule += " (from "
             for name in screen_names:
-                if screen_names.index(name) != len(screen_names)-1:
+                if screen_names.index(name) != len(screen_names) - 1:
                     rule += name + " OR "
                 else:
                     rule += f"{name} )"
@@ -66,7 +61,7 @@ def rule_generator(screen_names, search_terms, english=True, no_rt=False):
 
 
 class TweetStreamer(StreamingClient):
-
+    """Streams data from twitter v2 api and sends tweet to kafka topic"""
     def on_tweet(self, tweet):
         print(f"Full tweet: {tweet}")
         print(f"Tweet ID: {tweet.id}, Tweet: {tweet.text}")
@@ -79,26 +74,20 @@ class TweetStreamer(StreamingClient):
         except Exception as e:
             print(e)
 
-    # def on_errors(self, status_code):
-    #     logger.error("Stream has been disconnected due to %s", status_code)
-    #     if status_code == 420:
-    #         return False
-    #
-    # def on_exception(self, exception):
-    #     print("An error has occurred while trying retrieve tweets: {}".format(exception))
 
-
-def main():
+if __name__ == '__main__':
     # Search keywords
-    screen_names = ["Benzinga", "CNBC Now", "Stocktwits", "WSJ Markets"]
+    # screen_names = ["Benzinga", "CNBC Now", "Stocktwits", "WSJ Markets"]
     hashtags = ["#earthquake", "#storm", "#tsunami", "#flooding"]
-    search_terms = ["market narrative"]
+    search_terms = ["wildfires"]
+
     # rules = rule_generator(screen_names=screen_names, search_terms=search_terms, english=True, no_rt=True)
-    rules = "from (@stlouisfed OR @business OR @MarketWatch) lang:en -is:retweet"
+    rules = search_terms[0] + "lang:en -is:retweet"
     print(rules)
     rule_ids = []
     # existing_rules = TweetStreamer.get_rules()
     # logger.info("Existing rules: %s", existing_rules)
+
     # initialize client
     streaming_client = TweetStreamer(bearer_token=BEARER_TOKEN, wait_on_rate_limit=True)
     result = streaming_client.get_rules()
@@ -111,11 +100,8 @@ def main():
             streaming_client.delete_rules(rule_ids)
         else:
             print("No rules to delete.")
+
+    # Start filter streaming from Twitter API
     streaming_client = TweetStreamer(bearer_token=BEARER_TOKEN)
     streaming_client.add_rules(add=tweepy.StreamRule(value=rules))
     streaming_client.filter()
-
-
-if __name__ == '__main__':
-    # insert twitter stream code
-    main()
