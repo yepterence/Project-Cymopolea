@@ -8,14 +8,14 @@ spark_ver = pyspark.__version__
 # Instantiate spark object creator
 builder = SparkSession \
         .builder\
-        .appName("MarketSentiment")\
+        .appName("NaturalDisasters")\
         .getOrCreate()
 
 # subscribe to kafka and store data in dataframe format
 df = builder \
     .readStream \
     .format("kafka")\
-    .option("subscribe", "market_news")\
+    .option("subscribe", "disasters")\
     .option("kafka.bootstrap.servers", "localhost:9092")\
     .load()
 

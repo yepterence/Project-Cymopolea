@@ -1,31 +1,30 @@
 #!/usr/bin/env python
 
-from kafka3 import KafkaConsumer
+# from kafka3 import KafkaConsumer
+from pykafka import KafkaClient
+from pykafka.common import OffsetType
 import json
 import logging
 
-TOPIC = 'market_news'
+from pykafka.exceptions import SocketDisconnectedError, LeaderNotAvailable
+
+TOPIC = 'disasters'
 logger = logging.getLogger(__name__)
 BOOTSTRAP_SERVERS = ['localhost:9092']
-if __name__ == '__main__':
-    consumer = KafkaConsumer(
-        TOPIC,
-        bootstrap_servers=BOOTSTRAP_SERVERS,
-        auto_offset_reset='earliest',
-        max_poll_records=100,
-        value_deserializer=(lambda v: json.loads(v.decode('ascii')))
-    )
-    # load messages from json
-    consumer.subscribe([TOPIC])
-    if consumer.bootstrap_connected():
-        print(f"Connection with Producer Established on {BOOTSTRAP_SERVERS}")
-        try:
-            while True:
-                msg = consumer.poll(1.0)
-                if not msg:
-                    print("No messages. Consumer waiting..")
-                elif msg:
-                    print("Incoming message: %s", msg)
-        except Exception as e:
-            print(f"An Error Occurred: {e}")
 
+
+if __name__ == '__main__':
+    client = KafkaClient(hosts=BOOTSTRAP_SERVERS[0])
+    topic = client.topics[TOPIC]
+    consumer = topic.get_simple_consumer(
+        consumer_group="nat_disaster",
+        auto_offset_reset=OffsetType.EARLIEST,
+        reset_offset_on_start=False,
+        value_deserializer=lambda m: json.loads(m.decode('utf-8'))
+    )
+    try:
+        consumer.consume()
+    except (SocketDisconnectedError, LeaderNotAvailable) as e:
+        print(e)
+        consumer.stop()
+        consumer.start()
