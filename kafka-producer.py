@@ -1,22 +1,19 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import json
-from pykafka import KafkaClient
-from pykafka.exceptions import SocketDisconnectedError, LeaderNotAvailable
 import logging
-import time
+import datetime
 import os
 import tweepy
-from dotenv import load_dotenv
-from tweepy import Client, StreamingClient
-
-load_dotenv(".env")
+from tweepy import StreamingClient
+from pykafka import KafkaClient
+from pykafka.exceptions import SocketDisconnectedError, LeaderNotAvailable
 
 logger = logging.getLogger(__name__)
 # TO-DO: create a way to take in args during start of application
 
 # kafka topic 
-TOPIC_NAME = 'disasters'
+TOPIC_NAME = 'natural_disasters'
 
 # User level auth creds
 CONSUMER_KEY = os.environ.get('CONSUMER_KEY')
@@ -29,30 +26,26 @@ ACCESS_SECRET = os.environ.get('ACCESS_SECRET')
 
 class TweetStreamer(StreamingClient):
     """Streams data from twitter v2 api and sends tweet to kafka topic"""
-
-    def __init__(self, kafka_producer, bearer_token, topic, **kwargs):
-
-        super().__init__(bearer_token, **kwargs)
-        self.producer = kafka_producer
-        self.bearer_token = bearer_token
-        self.topic = topic
+    def __init__(self, bearer_token, topic):
+        super().__init__(bearer_token)
+        client = KafkaClient('127.0.0.1:9092')
+        self.topic = client.topics[topic]
 
     def on_tweet(self, tweet):
-        print(f"Full tweet: {tweet}")
+        result = json.loads(tweet)
+        print(f"Full tweet: {result}")
         print(f"Tweet ID: {tweet.id}, Tweet: {tweet.text}")
-
         logger.info("Incoming data: %s", tweet['data'])
-        producer = self.producer.get_producer()
-        try:
-            producer.produce(bytes(json.dumps(tweet['data']), "ascii"))
-            time.sleep(0.5)
-
-        except (SocketDisconnectedError, LeaderNotAvailable) as e:
-            print(e)
-            producer = self.producer.get_producer()
-            producer.stop()
-            producer.start()
-            producer.produce(bytes(json.dumps(tweet['data']), "ascii"))
+        with self.topic.get_producer() as producer:
+            try:
+                payload = bytes(tweet.text.encode('utf-8'))
+                producer.produce(payload)
+            except Exception as e:
+                print("An Error Occurred: %s", e)
+                self.topic.get_producer()
+                producer.stop()
+                producer.start()
+                producer.produce(payload)
 
     def on_exception(self, exception):
         print(exception)
@@ -72,25 +65,23 @@ def generate_rules(screen_names, search_terms, english=True, no_rt=False):
         elif len(screen_names) > 1:
             rule += " (from "
             for name in screen_names:
-                if screen_names.index(name) != len(screen_names) - 1:
+                if screen_names.index(name) < len(screen_names):
                     rule += name + " OR "
                 else:
                     rule += f"{name} )"
         else:
             pass
-    if english:
-        rule += " lang:en"
-    if no_rt:
-        rule += " -is:retweet"
+        rule += " lang:en" if english else ""
+        rule += " -is:retweet" if no_rt else ""
 
     return rule
 
 
-def start_twitter_stream(kafka_producer, bearer_token, rules):
+def start_twitter_stream(bearer_token, rules):
     """Start streaming tweets from tweepy API and send messages to producer."""
 
     # initialize client
-    streaming_client = TweetStreamer(bearerToken=bearer_token, kafka_producer=kafka_producer)
+    streaming_client = TweetStreamer(bearer_token=bearer_token, topic=TOPIC_NAME)
     # get all current rules
     rule_check_cb(streaming_client)
     streaming_client.add_rules(add=tweepy.StreamRule(value=rules))
@@ -114,10 +105,8 @@ def rule_check_cb(client):
 if __name__ == '__main__':
 
     # Instantiate kafka client
-    k_client = KafkaClient("127.0.0.1:9092")
-    kafkaProducer = k_client.topics[bytes(TOPIC_NAME, "utf-8")]
     hashtags = ["#earthquake", "#storm", "#tsunami", "#flooding"]
     search_terms = ["wildfires", "flood"]
     # rules = search_terms[0] + " lang:en -is:retweet"
-    new_rules = generate_rules(search_terms=search_terms, english=True, no_rt=True)
-    start_twitter_stream(BEARER_TOKEN, kafkaProducer, rules=new_rules)
+    new_rules = generate_rules(screen_names=None, search_terms=search_terms, english=True, no_rt=True)
+    start_twitter_stream(BEARER_TOKEN, rules=new_rules)
