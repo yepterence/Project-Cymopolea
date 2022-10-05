@@ -15,7 +15,7 @@ builder = SparkSession \
 df = builder \
     .readStream \
     .format("kafka")\
-    .option("subscribe", "disasters")\
+    .option("subscribe", "natural_disasters")\
     .option("kafka.bootstrap.servers", "localhost:9092")\
     .load()
 

@@ -32,24 +32,26 @@ class TweetStreamer(StreamingClient):
         self.topic = client.topics[topic]
 
     def on_tweet(self, tweet):
-        result = json.loads(tweet)
-        print(f"Full tweet: {result}")
-        print(f"Tweet ID: {tweet.id}, Tweet: {tweet.text}")
-        logger.info("Incoming data: %s", tweet['data'])
+        payload = {'tweet_id': tweet.id,
+                   'tweet_text': tweet.text,
+                   'location': tweet.geo,
+                   'author_id': tweet.author_id
+                   }
+        print(f"New tweet received: {payload}")
+        bytes_payload = json.dumps(payload).encode('utf-8')
         with self.topic.get_producer() as producer:
             try:
-                payload = bytes(tweet.text.encode('utf-8'))
-                producer.produce(payload)
+                producer.produce(bytes_payload)
             except Exception as e:
                 print("An Error Occurred: %s", e)
                 self.topic.get_producer()
                 producer.stop()
                 producer.start()
-                producer.produce(payload)
+                producer.produce(bytes_payload)
 
-    def on_exception(self, exception):
-        print(exception)
-        return True
+    def on_request_error(self, status_code):
+        print(f"A request issue was encountered with code: {status_code}")
+        self.disconnect()
 
 
 # Need to create utils module for these.
