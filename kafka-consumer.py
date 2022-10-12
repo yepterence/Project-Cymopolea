@@ -8,7 +8,7 @@ import logging
 
 from pykafka.exceptions import SocketDisconnectedError, LeaderNotAvailable
 
-TOPIC = 'disasters'
+TOPIC = 'natural_disasters'
 logger = logging.getLogger(__name__)
 BOOTSTRAP_SERVERS = ['localhost:9092']
 

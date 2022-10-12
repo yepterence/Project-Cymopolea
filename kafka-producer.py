@@ -26,18 +26,22 @@ ACCESS_SECRET = os.environ.get('ACCESS_SECRET')
 
 class TweetStreamer(StreamingClient):
     """Streams data from twitter v2 api and sends tweet to kafka topic"""
+
     def __init__(self, bearer_token, topic):
         super().__init__(bearer_token)
         client = KafkaClient('127.0.0.1:9092')
         self.topic = client.topics[topic]
 
+    def on_connect(self):
+        print("Connection established")
+
     def on_tweet(self, tweet):
         payload = {'tweet_id': tweet.id,
                    'tweet_text': tweet.text,
-                   'location': tweet.geo,
-                   'author_id': tweet.author_id
+                   'created_at': tweet.created_at.strftime("%Y-%m-%d, %H:%M:%S"),
+                   'author_id': tweet.author_id,
                    }
-        print(f"New tweet received: {payload}")
+        print(f"New tweet payload received: {payload}")
         bytes_payload = json.dumps(payload).encode('utf-8')
         with self.topic.get_producer() as producer:
             try:
@@ -87,7 +91,9 @@ def start_twitter_stream(bearer_token, rules):
     # get all current rules
     rule_check_cb(streaming_client)
     streaming_client.add_rules(add=tweepy.StreamRule(value=rules))
-    streaming_client.filter()
+    streaming_client.filter(tweet_fields=['created_at'],
+                            expansions=['author_id'],
+                            place_fields=['full_name'])
 
 
 def rule_check_cb(client):
@@ -105,10 +111,10 @@ def rule_check_cb(client):
 
 
 if __name__ == '__main__':
-
     # Instantiate kafka client
     hashtags = ["#earthquake", "#storm", "#tsunami", "#flooding"]
-    search_terms = ["wildfires", "flood"]
-    # rules = search_terms[0] + " lang:en -is:retweet"
-    new_rules = generate_rules(screen_names=None, search_terms=search_terms, english=True, no_rt=True)
+    search_terms = ["wildfires", "flood", "earthquake", "hurricane"]
+    search_all = " OR ".join(search_terms)
+    new_rules = search_all + " lang:en -is:retweet"
+    # new_rules = generate_rules(screen_names=None, search_terms=search_terms, english=True, no_rt=True)
     start_twitter_stream(BEARER_TOKEN, rules=new_rules)
